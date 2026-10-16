@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>问卷统计</title>
+    <style>
+        body {
+            max-width: 900px;
+            margin: 30px auto;
+            padding: 0 16px;
+            font-family: Arial, sans-serif;
+        }
+
+        input,
+        button {
+            display: block;
+            width: 100%;
+            max-width: 600px;
+            box-sizing: border-box;
+            margin: 8px 0;
+            padding: 10px;
+        }
+
+        .item {
+            border: 1px solid #ddd;
+            margin: 16px 0;
+            padding: 16px;
+            border-radius: 8px;
+        }
+
+        #message {
+            color: #b00020;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>问卷统计</h1>
+
+    <input id="surveyId" placeholder="输入问卷ID">
+    <button id="loadButton">加载统计</button>
+    <p id="message"></p>
+    <div id="statistics"></div>
+
+    <script>
+        const apiBase = "http://localhost:3000/api";
+        const token = localStorage.getItem("questionnaire_token");
+
+        function showMessage(message, success = false) {
+            const element = document.querySelector("#message");
+            element.textContent = message;
+            element.style.color = success ? "#087f23" : "#b00020";
+        }
+
+        function renderStatistics(data) {
+            const container = document.querySelector("#statistics");
+            container.innerHTML = `
+        <h2>${data.title}</h2>
+        <p>总回答数：${data.totalResponses}</p>
+      `;
+
+            data.statistics.forEach((item) => {
+                const element = document.createElement("div");
+                element.className = "item";
+
+                if (item.options) {
+                    element.innerHTML = `
+            <h3>${item.title}</h3>
+            <p>回答数：${item.totalAnswers}</p>
+            ${Object.values(item.options)
+                            .map((option) => `<div>${option.label}：${option.count}</div>`)
+                            .join("")}
+          `;
+                } else if (item.average !== undefined) {
+                    element.innerHTML = `
+            <h3>${item.title}</h3>
+            <p>回答数：${item.totalAnswers}</p>
+            <p>平均值：${item.average ?? "暂无数据"}</p>
+            <p>全部数字：${item.values.join(", ")}</p>
+          `;
+                } else {
+                    element.innerHTML = `
+            <h3>${item.title}</h3>
+            <p>回答数：${item.totalAnswers}</p>
+            <p>填写内容：</p>
+            <div>${item.values.join("<br>") || "暂无数据"}</div>
+          `;
+                }
+
+                container.appendChild(element);
+            });
+        }
+
+        async function loadStatistics() {
+            try {
+                if (!token) {
+                    throw new Error("请先在首页登录");
+                }
+
+                const surveyId = document.querySelector("#surveyId").value.trim();
+
+                if (!surveyId) {
+                    throw new Error("请输入问卷ID");
+                }
+
+                const response = await fetch(`${apiBase}/stats/${surveyId}`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.message || "加载统计失败");
+                }
+
+                renderStatistics(result.data);
+                showMessage("统计加载成功", true);
+            } catch (error) {
+                showMessage(error.message);
+            }
+        }
+
+        document
+            .querySelector("#loadButton")
+            .addEventListener("click", loadStatistics);
+    </script>
+</body>
+
+</html>

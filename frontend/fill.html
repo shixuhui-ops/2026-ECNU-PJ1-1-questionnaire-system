@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>填写问卷</title>
+    <style>
+        body {
+            max-width: 800px;
+            margin: 30px auto;
+            padding: 0 16px;
+            font-family: Arial, sans-serif;
+        }
+
+        input,
+        textarea,
+        button {
+            display: block;
+            width: 100%;
+            max-width: 600px;
+            box-sizing: border-box;
+            margin: 8px 0;
+            padding: 10px;
+        }
+
+        label {
+            display: block;
+            margin: 8px 0;
+        }
+
+        .question {
+            border: 1px solid #ddd;
+            padding: 16px;
+            margin: 16px 0;
+            border-radius: 8px;
+        }
+
+        #message {
+            color: #b00020;
+            min-height: 24px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: fit-content;
+            margin: 10px 0;
+        }
+
+        label input[type="radio"],
+        label input[type="checkbox"] {
+            display: inline-block;
+            width: auto;
+            margin: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <h1 id="surveyTitle">填写问卷</h1>
+    <p id="surveyDescription"></p>
+
+    <input id="accessCode" placeholder="输入问卷访问码">
+    <button id="loadButton">加载问卷</button>
+
+    <div id="questionContainer"></div>
+    <button id="nextButton" class="hidden">下一题</button>
+    <button id="submitButton" class="hidden">提交问卷</button>
+    <p id="message"></p>
+
+    <script>
+        const apiBase = "http://localhost:3000/api";
+        let survey = null;
+        let currentQuestion = null;
+        let answers = [];
+
+        function showMessage(message, success = false) {
+            const element = document.querySelector("#message");
+            element.textContent = message;
+            element.style.color = success ? "#087f23" : "#b00020";
+        }
+
+        function getAccessCode() {
+            const queryCode = new URLSearchParams(location.search).get("code");
+            return queryCode || document.querySelector("#accessCode").value.trim();
+        }
+
+        async function loadSurvey() {
+            try {
+                const accessCode = getAccessCode();
+
+                if (!accessCode) {
+                    throw new Error("请输入问卷访问码");
+                }
+
+                const response = await fetch(
+                    `${apiBase}/surveys/public/${accessCode}`
+                );
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.message || "加载问卷失败");
+                }
+
+                survey = result.data;
+                answers = [];
+                currentQuestion = survey.questions
+                    .slice()
+                    .sort((a, b) => a.order - b.order)[0];
+
+                document.querySelector("#surveyTitle").textContent = survey.title;
+                document.querySelector("#surveyDescription").textContent =
+                    survey.description;
+
+                renderCurrentQuestion();
+                showMessage("问卷加载成功", true);
+            } catch (error) {
+                showMessage(error.message);
+            }
+        }
+
+        function renderCurrentQuestion() {
+            const container = document.querySelector("#questionContainer");
+            const nextButton = document.querySelector("#nextButton");
+            const submitButton = document.querySelector("#submitButton");
+
+            container.innerHTML = "";
+
+            if (!currentQuestion) {
+                nextButton.classList.add("hidden");
+                submitButton.classList.remove("hidden");
+                return;
+            }
+
+            nextButton.classList.remove("hidden");
+            submitButton.classList.add("hidden");
+
+            const wrapper = document.createElement("div");
+            wrapper.className = "question";
+
+            const title = document.createElement("h2");
+            title.textContent = currentQuestion.title +
+                (currentQuestion.required ? " *" : "");
+            wrapper.appendChild(title);
+
+            if (currentQuestion.description) {
+                const description = document.createElement("p");
+                description.textContent = currentQuestion.description;
+                wrapper.appendChild(description);
+            }
+
+            if (currentQuestion.type === "single") {
+                currentQuestion.options.forEach((option) => {
+                    const label = document.createElement("label");
+                    label.innerHTML = `
+            <input type="radio" name="answer" value="${option.value}">
+            ${option.label}
+          `;
+                    wrapper.appendChild(label);
+                });
+            }
+
+            if (currentQuestion.type === "multiple") {
+                currentQuestion.options.forEach((option) => {
+                    const label = document.createElement("label");
+                    label.innerHTML = `
+            <input type="checkbox" name="answer" value="${option.value}">
+            ${option.label}
+          `;
+                    wrapper.appendChild(label);
+                });
+            }
+
+            if (currentQuestion.type === "text") {
+                const textarea = document.createElement("textarea");
+                textarea.id = "answerInput";
+                wrapper.appendChild(textarea);
+            }
+
+            if (currentQuestion.type === "number") {
+                const input = document.createElement("input");
+                input.id = "answerInput";
+                input.type = "number";
+                wrapper.appendChild(input);
+            }
+
+            container.appendChild(wrapper);
+        }
+
+        function collectCurrentAnswer() {
+            if (currentQuestion.type === "single") {
+                const selected = document.querySelector(
+                    'input[name="answer"]:checked'
+                );
+                return selected ? selected.value : "";
+            }
+
+            if (currentQuestion.type === "multiple") {
+                return [...document.querySelectorAll('input[name="answer"]:checked')]
+                    .map((input) => input.value);
+            }
+
+            return document.querySelector("#answerInput")?.value || "";
+        }
+
+        async function goToNextQuestion() {
+            try {
+                const value = collectCurrentAnswer();
+
+                if (
+                    currentQuestion.required &&
+                    (value === "" || (Array.isArray(value) && value.length === 0))
+                ) {
+                    throw new Error("请完成当前必答题");
+                }
+
+                answers = answers.filter(
+                    (answer) => answer.questionId !== currentQuestion._id
+                );
+
+                answers.push({
+                    questionId: currentQuestion._id,
+                    value
+                });
+
+                const response = await fetch(
+                    `${apiBase}/surveys/public/${survey.accessCode}/next-question`,
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            currentQuestionId: currentQuestion._id,
+                            answers
+                        })
+                    }
+                );
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.message || "跳转失败");
+                }
+
+                currentQuestion = result.data.question;
+                renderCurrentQuestion();
+            } catch (error) {
+                showMessage(error.message);
+            }
+        }
+
+        async function submitSurvey() {
+            try {
+                const response = await fetch(
+                    `${apiBase}/responses/${survey.accessCode}`,
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({ answers })
+                    }
+                );
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.message || "提交失败");
+                }
+
+                showMessage("问卷提交成功", true);
+                document.querySelector("#submitButton").disabled = true;
+            } catch (error) {
+                showMessage(error.message);
+            }
+        }
+
+        document.querySelector("#loadButton").addEventListener("click", loadSurvey);
+        document.querySelector("#nextButton").addEventListener("click", goToNextQuestion);
+        document.querySelector("#submitButton").addEventListener("click", submitSurvey);
+
+        const queryCode = new URLSearchParams(location.search).get("code");
+        if (queryCode) {
+            document.querySelector("#accessCode").value = queryCode;
+            loadSurvey();
+        }
+    </script>
+</body>
+
+</html>

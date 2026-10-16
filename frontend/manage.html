@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>管理问卷</title>
+    <style>
+        body {
+            max-width: 900px;
+            margin: 30px auto;
+            padding: 0 16px;
+            font-family: Arial, sans-serif;
+        }
+
+        input,
+        textarea,
+        select,
+        button {
+            display: block;
+            width: 100%;
+            max-width: 650px;
+            box-sizing: border-box;
+            margin: 8px 0;
+            padding: 10px;
+        }
+
+        section {
+            border: 1px solid #ddd;
+            padding: 16px;
+            margin: 16px 0;
+            border-radius: 8px;
+        }
+
+        #message {
+            color: #b00020;
+        }
+
+        .question {
+            border-top: 1px solid #eee;
+            padding: 12px 0;
+        }
+
+        label input[type="checkbox"] {
+            display: inline;
+            width: auto;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>管理问卷</h1>
+
+    <input id="surveyId" placeholder="输入问卷ID">
+    <button id="loadButton">加载问卷</button>
+
+    <section>
+        <h2>添加题目</h2>
+
+        <input id="questionTitle" placeholder="题目标题">
+
+        <select id="questionType">
+            <option value="single">单选题</option>
+            <option value="multiple">多选题</option>
+            <option value="text">文本填空题</option>
+            <option value="number">数字填空题</option>
+        </select>
+
+        <textarea id="questionOptions" placeholder="选项，每行一个，仅单选和多选使用"></textarea>
+
+        <label>
+            <input id="questionRequired" type="checkbox">
+            必答题
+        </label>
+
+        <input id="minSelections" type="number" placeholder="最少选择数量">
+        <input id="maxSelections" type="number" placeholder="最多选择数量">
+        <input id="minLength" type="number" placeholder="最少文本长度">
+        <input id="maxLength" type="number" placeholder="最多文本长度">
+        <input id="minValue" type="number" placeholder="最小数值">
+        <input id="maxValue" type="number" placeholder="最大数值">
+
+        <label>
+            <input id="integerOnly" type="checkbox">
+            数字必须为整数
+        </label>
+
+        <button id="addQuestionButton">添加题目</button>
+    </section>
+
+    <section>
+        <h2>当前题目</h2>
+        <div id="questionList"></div>
+    </section>
+
+    <section>
+        <h2>添加跳转规则</h2>
+
+        <select id="sourceQuestion"></select>
+
+        <select id="jumpOperator">
+            <option value="equals">等于</option>
+            <option value="contains">包含</option>
+            <option value="greaterThan">大于</option>
+            <option value="lessThan">小于</option>
+            <option value="greaterOrEqual">大于等于</option>
+            <option value="lessOrEqual">小于等于</option>
+        </select>
+
+        <input id="expectedValue" placeholder="触发条件值">
+        <select id="targetQuestion"></select>
+
+        <button id="addRuleButton">添加跳转规则</button>
+    </section>
+
+    <section>
+        <input id="deadline" type="datetime-local" placeholder="问卷截止时间">
+
+        <button id="saveDeadlineButton">保存截止时间</button>
+        <button id="publishButton">发布问卷</button>
+        <button id="closeButton">关闭问卷</button>
+
+        <p id="accessUrl"></p>
+    </section>
+
+    <p id="message"></p>
+
+    <script>
+        const apiBase = "http://localhost:3000/api";
+        const token = localStorage.getItem("questionnaire_token");
+        let survey = null;
+
+        function showMessage(message, success = false) {
+            const element = document.querySelector("#message");
+            element.textContent = message;
+            element.style.color = success ? "#087f23" : "#b00020";
+        }
+
+        async function apiRequest(path, options = {}) {
+            const response = await fetch(`${apiBase}${path}`, {
+                ...options,
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                    ...(options.headers || {})
+                }
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.message || "请求失败");
+            }
+
+            return result;
+        }
+
+        function renderQuestions() {
+            const container = document.querySelector("#questionList");
+            container.innerHTML = "";
+
+            survey.questions
+                .slice()
+                .sort((a, b) => a.order - b.order)
+                .forEach((question, index) => {
+                    const item = document.createElement("div");
+                    item.className = "question";
+                    item.innerHTML = `
+            <strong>${index + 1}. ${question.title}</strong>
+            <div>类型：${question.type}</div>
+            <div>必答：${question.required ? "是" : "否"}</div>
+            <div>题目ID：${question._id}</div>
+          `;
+                    container.appendChild(item);
+                });
+
+            const sourceSelect = document.querySelector("#sourceQuestion");
+            const targetSelect = document.querySelector("#targetQuestion");
+
+            sourceSelect.innerHTML = "";
+            targetSelect.innerHTML = "";
+
+            survey.questions
+                .slice()
+                .sort((a, b) => a.order - b.order)
+                .forEach((question) => {
+                    const sourceOption = document.createElement("option");
+                    sourceOption.value = question._id;
+                    sourceOption.textContent = `${question.order + 1}. ${question.title}`;
+
+                    const targetOption = sourceOption.cloneNode(true);
+
+                    sourceSelect.appendChild(sourceOption);
+                    targetSelect.appendChild(targetOption);
+                });
+        }
+
+        async function loadSurvey() {
+            try {
+                if (!token) {
+                    throw new Error("请先在首页登录");
+                }
+
+                const surveyId = document.querySelector("#surveyId").value.trim();
+
+                if (!surveyId) {
+                    throw new Error("请输入问卷ID");
+                }
+
+                const result = await apiRequest(`/surveys/${surveyId}`);
+                survey = result.data;
+                renderQuestions();
+                showMessage("问卷加载成功", true);
+            } catch (error) {
+                showMessage(error.message);
+            }
+        }
+
+        async function addQuestion() {
+            try {
+                if (!survey) {
+                    throw new Error("请先加载问卷");
+                }
+
+                const type = document.querySelector("#questionType").value;
+                const optionText = document.querySelector("#questionOptions").value;
+
+                const options = optionText
+                    .split("\n")
+                    .map((label) => label.trim())
+                    .filter(Boolean)
+                    .map((label) => ({
+                        label,
+                        value: label
+                    }));
+
+                const validation = {};
+                const fields = [
+                    "minSelections",
+                    "maxSelections",
+                    "minLength",
+                    "maxLength",
+                    "minValue",
+                    "maxValue"
+                ];
+
+                fields.forEach((field) => {
+                    const value = document.querySelector(`#${field}`).value;
+                    if (value !== "") {
+                        validation[field] = Number(value);
+                    }
+                });
+
+                validation.integerOnly =
+                    document.querySelector("#integerOnly").checked;
+
+                const result = await apiRequest(
+                    `/surveys/${survey._id}/questions`,
+                    {
+                        method: "POST",
+                        body: JSON.stringify({
+                            type,
+                            title: document.querySelector("#questionTitle").value,
+                            required: document.querySelector("#questionRequired").checked,
+                            options,
+                            validation
+                        })
+                    }
+                );
+
+                survey.questions.push(result.data);
+                renderQuestions();
+                showMessage("题目添加成功", true);
+            } catch (error) {
+                showMessage(error.message);
+            }
+        }
+
+        async function publishSurvey() {
+            try {
+                if (!survey) {
+                    throw new Error("请先加载问卷");
+                }
+
+                const result = await apiRequest(
+                    `/surveys/${survey._id}/publish`,
+                    {
+                        method: "POST"
+                    }
+                );
+
+                document.querySelector("#accessUrl").textContent =
+                    `填写地址：http://localhost:5500/fill.html?code=${result.data.survey.accessCode}`;
+
+                showMessage("问卷发布成功", true);
+            } catch (error) {
+                showMessage(error.message);
+            }
+        }
+
+        function updateQuestionFields() {
+            const type = document.querySelector("#questionType").value;
+            const options = document.querySelector("#questionOptions");
+            const selectionFields = [
+                "minSelections",
+                "maxSelections"
+            ];
+            const textFields = [
+                "minLength",
+                "maxLength"
+            ];
+            const numberFields = [
+                "minValue",
+                "maxValue",
+                "integerOnly"
+            ];
+
+            options.style.display =
+                type === "single" || type === "multiple" ? "block" : "none";
+
+            selectionFields.forEach((id) => {
+                document.querySelector(`#${id}`).style.display =
+                    type === "multiple" ? "block" : "none";
+            });
+
+            textFields.forEach((id) => {
+                document.querySelector(`#${id}`).style.display =
+                    type === "text" ? "block" : "none";
+            });
+
+            numberFields.forEach((id) => {
+                const element = document.querySelector(`#${id}`);
+
+                if (id === "integerOnly") {
+                    element.parentElement.style.display =
+                        type === "number" ? "block" : "none";
+                } else {
+                    element.style.display =
+                        type === "number" ? "block" : "none";
+                }
+            });
+        }
+
+        document
+            .querySelector("#questionType")
+            .addEventListener("change", updateQuestionFields);
+
+        updateQuestionFields();
+        document.querySelector("#loadButton").addEventListener("click", loadSurvey);
+        document
+            .querySelector("#addQuestionButton")
+            .addEventListener("click", addQuestion);
+        document
+            .querySelector("#publishButton")
+            .addEventListener("click", publishSurvey);
+    </script>
+    <script>
+        async function addJumpRule() {
+            try {
+                if (!survey) {
+                    throw new Error("请先加载问卷");
+                }
+
+                await apiRequest(`/surveys/${survey._id}/jump-rules`, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        sourceQuestionId: document.querySelector("#sourceQuestion").value,
+                        targetQuestionId: document.querySelector("#targetQuestion").value,
+                        operator: document.querySelector("#jumpOperator").value,
+                        expectedValue: document.querySelector("#expectedValue").value
+                    })
+                });
+
+                showMessage("跳转规则添加成功", true);
+            } catch (error) {
+                showMessage(error.message);
+            }
+        }
+
+        document
+            .querySelector("#addRuleButton")
+            .addEventListener("click", addJumpRule);
+    </script>
+    <script>
+        async function saveDeadline() {
+            try {
+                if (!survey) {
+                    throw new Error("请先加载问卷");
+                }
+
+                const deadline = document.querySelector("#deadline").value;
+
+                await apiRequest(`/surveys/${survey._id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({
+                        deadline: deadline ? new Date(deadline).toISOString() : null
+                    })
+                });
+
+                showMessage("截止时间保存成功", true);
+            } catch (error) {
+                showMessage(error.message);
+            }
+        }
+
+        async function closeSurvey() {
+            try {
+                if (!survey) {
+                    throw new Error("请先加载问卷");
+                }
+
+                await apiRequest(`/surveys/${survey._id}/close`, {
+                    method: "POST"
+                });
+
+                showMessage("问卷已关闭", true);
+            } catch (error) {
+                showMessage(error.message);
+            }
+        }
+
+        document
+            .querySelector("#saveDeadlineButton")
+            .addEventListener("click", saveDeadline);
+
+        document
+            .querySelector("#closeButton")
+            .addEventListener("click", closeSurvey);
+    </script>
+</body>
+
+</html>

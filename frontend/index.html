@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>在线问卷系统</title>
+    <style>
+        body {
+            max-width: 900px;
+            margin: 30px auto;
+            padding: 0 16px;
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+        }
+
+        section {
+            border: 1px solid #ddd;
+            padding: 16px;
+            margin-bottom: 16px;
+            border-radius: 8px;
+        }
+
+        input,
+        textarea,
+        select,
+        button {
+            display: block;
+            width: 100%;
+            max-width: 520px;
+            margin: 8px 0;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .survey-item {
+            border-top: 1px solid #eee;
+            padding: 12px 0;
+        }
+
+        #message {
+            color: #b00020;
+            min-height: 24px;
+        }
+
+        label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: fit-content;
+            margin: 8px 0;
+        }
+
+        label input[type="checkbox"] {
+            display: inline-block;
+            width: auto;
+            margin: 0;
+        }
+
+        nav {
+            display: flex;
+            gap: 12px;
+            margin: 16px 0;
+        }
+
+        nav a {
+            display: inline-block;
+            padding: 10px 16px;
+            border: 1px solid #999;
+            color: #111;
+            text-decoration: none;
+            background: #f5f5f5;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>在线问卷系统</h1>
+    <nav>
+        <a href="./manage.html">管理问卷</a>
+        <a href="./fill.html">填写问卷</a>
+        <a href="./stats.html">查看统计</a>
+        <a href="#" id="logoutLink">退出登录</a>
+    </nav>
+    <p id="message"></p>
+
+    <section id="authSection">
+        <h2>注册或登录</h2>
+        <input id="username" placeholder="用户名">
+        <input id="password" type="password" placeholder="密码">
+        <button id="registerButton">注册</button>
+        <button id="loginButton">登录</button>
+    </section>
+
+    <section id="dashboardSection" class="hidden">
+        <h2>创建问卷</h2>
+        <input id="surveyTitle" placeholder="问卷标题">
+        <textarea id="surveyDescription" placeholder="问卷说明"></textarea>
+        <label>
+            <input id="allowAnonymous" type="checkbox">
+            允许匿名填写
+        </label>
+        <button id="createSurveyButton">创建问卷</button>
+
+        <h2>我的问卷</h2>
+        <button id="loadSurveysButton">刷新列表</button>
+        <div id="surveyList"></div>
+    </section>
+
+    <script>
+        const apiBase = "http://localhost:3000/api";
+        let token = localStorage.getItem("questionnaire_token") || "";
+
+        const messageElement = document.querySelector("#message");
+        const authSection = document.querySelector("#authSection");
+        const dashboardSection = document.querySelector("#dashboardSection");
+
+        function showMessage(message, isError = true) {
+            messageElement.textContent = message;
+            messageElement.style.color = isError ? "#b00020" : "#087f23";
+        }
+
+        function updateView() {
+            const loggedIn = Boolean(token);
+            authSection.classList.toggle("hidden", loggedIn);
+            dashboardSection.classList.toggle("hidden", !loggedIn);
+        }
+
+        async function apiRequest(path, options = {}) {
+            const response = await fetch(`${apiBase}${path}`, {
+                ...options,
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    ...(options.headers || {})
+                }
+            });
+
+            const body = await response.json();
+
+            if (!response.ok) {
+                throw new Error(body.message || "请求失败");
+            }
+
+            return body;
+        }
+
+        async function authenticate(path) {
+            try {
+                const result = await apiRequest(path, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        username: document.querySelector("#username").value,
+                        password: document.querySelector("#password").value
+                    })
+                });
+
+                token = result.data.token;
+                localStorage.setItem("questionnaire_token", token);
+                showMessage("操作成功", false);
+                updateView();
+                await loadSurveys();
+            } catch (error) {
+                showMessage(error.message);
+            }
+        }
+
+        async function createSurvey() {
+            try {
+                await apiRequest("/surveys", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        title: document.querySelector("#surveyTitle").value,
+                        description: document.querySelector("#surveyDescription").value,
+                        allowAnonymous: document.querySelector("#allowAnonymous").checked
+                    })
+                });
+
+                showMessage("问卷创建成功", false);
+                await loadSurveys();
+            } catch (error) {
+                showMessage(error.message);
+            }
+        }
+
+        async function loadSurveys() {
+            try {
+                const result = await apiRequest("/surveys/mine");
+                const list = document.querySelector("#surveyList");
+                list.innerHTML = "";
+
+                for (const survey of result.data) {
+                    const item = document.createElement("div");
+                    item.className = "survey-item";
+                    item.innerHTML = `
+            <strong>${survey.title}</strong>
+            <div>状态：${survey.status}</div>
+            <div>问卷ID：${survey._id}</div>
+            <div>访问码：${survey.accessCode}</div>
+            <div>题目数：${survey.questions.length}</div>
+          `;
+                    list.appendChild(item);
+                }
+            } catch (error) {
+                showMessage(error.message);
+            }
+        }
+
+        document.querySelector("#registerButton").addEventListener("click", () => {
+            authenticate("/auth/register");
+        });
+
+        document.querySelector("#loginButton").addEventListener("click", () => {
+            authenticate("/auth/login");
+        });
+
+        document.querySelector("#createSurveyButton").addEventListener("click", createSurvey);
+        document.querySelector("#loadSurveysButton").addEventListener("click", loadSurveys);
+
+        updateView();
+
+        if (token) {
+            loadSurveys();
+        }
+        document.querySelector("#logoutLink").addEventListener("click", (event) => {
+            event.preventDefault();
+            localStorage.removeItem("questionnaire_token");
+            token = "";
+            document.querySelector("#username").value = "";
+            document.querySelector("#password").value = "";
+            updateView();
+            showMessage("已退出登录", false);
+        });
+    </script>
+</body>
+
+</html>
