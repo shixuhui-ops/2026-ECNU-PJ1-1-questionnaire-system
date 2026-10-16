@@ -1,11 +1,9 @@
 # 大作业一项目完成报告
-
 # 项目仓库
 
-GitHub 地址：https://github.com/shixuhui-ops/2026-ECNU-PJ1-1-questionnaire-system
+GitHub 地址：[点击访问项目 GitHub 仓库](https://github.com/shixuhui-ops/2026-ECNU-PJ1-1-questionnaire-system)
 
 ---
-
 
 ## 一、项目目标
 
