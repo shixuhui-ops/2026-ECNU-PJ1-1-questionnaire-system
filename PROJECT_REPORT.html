@@ -356,6 +356,73 @@ JWT，密码使用 bcryptjs 加密保存，前端使用 HTML、CSS 和 JavaScrip
 <li><code>responses.respondentId</code>：支持按填写用户查询记录</li>
 <li><code>responses.submittedAt</code>：支持按提交时间排序</li>
 </ul>
+<h3 id="mongodb-文档示例">MongoDB 文档示例</h3>
+<h4 id="users-文档">users 文档</h4>
+<pre><code>{
+  &quot;_id&quot;: &quot;ObjectId&quot;,
+  &quot;username&quot;: &quot;testuser&quot;,
+  &quot;passwordHash&quot;: &quot;$2b$12$...&quot;,
+  &quot;createdAt&quot;: &quot;2026-10-15T12:00:00.000Z&quot;,
+  &quot;updatedAt&quot;: &quot;2026-10-15T12:00:00.000Z&quot;
+}</code></pre>
+<h4 id="surveys-文档">surveys 文档</h4>
+<pre><code>{
+  &quot;_id&quot;: &quot;ObjectId&quot;,
+  &quot;ownerId&quot;: &quot;ObjectId&quot;,
+  &quot;title&quot;: &quot;学生信息调查问卷&quot;,
+  &quot;description&quot;: &quot;用于测试问卷功能&quot;,
+  &quot;accessCode&quot;: &quot;2b5ddbf18f84&quot;,
+  &quot;allowAnonymous&quot;: true,
+  &quot;status&quot;: &quot;published&quot;,
+  &quot;questions&quot;: [
+    {
+      &quot;_id&quot;: &quot;ObjectId&quot;,
+      &quot;type&quot;: &quot;single&quot;,
+      &quot;title&quot;: &quot;你的年级&quot;,
+      &quot;required&quot;: true,
+      &quot;options&quot;: [
+        { &quot;label&quot;: &quot;大一&quot;, &quot;value&quot;: &quot;大一&quot; },
+        { &quot;label&quot;: &quot;大二&quot;, &quot;value&quot;: &quot;大二&quot; }
+      ]
+    }
+  ],
+  &quot;jumpRules&quot;: [
+    {
+      &quot;sourceQuestionId&quot;: &quot;ObjectId&quot;,
+      &quot;operator&quot;: &quot;equals&quot;,
+      &quot;expectedValue&quot;: &quot;大一&quot;,
+      &quot;targetQuestionId&quot;: &quot;ObjectId&quot;
+    }
+  ]
+}</code></pre>
+<h4 id="responses-文档">responses 文档</h4>
+<pre><code>{
+  &quot;_id&quot;: &quot;ObjectId&quot;,
+  &quot;surveyId&quot;: &quot;ObjectId&quot;,
+  &quot;respondentId&quot;: null,
+  &quot;anonymous&quot;: true,
+  &quot;answers&quot;: [
+    {
+      &quot;questionId&quot;: &quot;ObjectId&quot;,
+      &quot;value&quot;: &quot;大一&quot;
+    },
+    {
+      &quot;questionId&quot;: &quot;ObjectId&quot;,
+      &quot;value&quot;: 20
+    }
+  ],
+  &quot;submittedAt&quot;: &quot;2026-10-15T12:30:00.000Z&quot;
+}</code></pre>
+<h3 id="系统业务流程">系统业务流程</h3>
+<ol type="1">
+<li>用户注册或登录，后端返回 JWT。</li>
+<li>用户创建草稿问卷，系统生成唯一访问码。</li>
+<li>创建者添加题目、校验规则和条件跳转规则。</li>
+<li>问卷发布后，填写者通过访问码获取公开问卷。</li>
+<li>填写者按跳转规则逐题回答，系统实时进行答案校验。</li>
+<li>提交成功后，回答保存到 <code>responses</code> 集合。</li>
+<li>创建者通过统计接口查看回答数量、选项分布、文本内容和数字平均值。</li>
+</ol>
 <h2 id="四关键业务逻辑">四、关键业务逻辑</h2>
 <h3 id="用户认证">用户认证</h3>
 <p>注册时使用 bcryptjs 对密码进行哈希，登录成功后签发

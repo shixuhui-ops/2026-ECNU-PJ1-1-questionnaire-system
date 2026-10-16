@@ -98,6 +98,80 @@ GitHub 地址：https://github.com/shixuhui-ops/2026-ECNU-PJ1-1-questionnaire-sy
 - `responses.respondentId`：支持按填写用户查询记录
 - `responses.submittedAt`：支持按提交时间排序
 
+### MongoDB 文档示例
+
+#### users 文档
+
+    {
+      "_id": "ObjectId",
+      "username": "testuser",
+      "passwordHash": "$2b$12$...",
+      "createdAt": "2026-10-15T12:00:00.000Z",
+      "updatedAt": "2026-10-15T12:00:00.000Z"
+    }
+
+#### surveys 文档
+
+    {
+      "_id": "ObjectId",
+      "ownerId": "ObjectId",
+      "title": "学生信息调查问卷",
+      "description": "用于测试问卷功能",
+      "accessCode": "2b5ddbf18f84",
+      "allowAnonymous": true,
+      "status": "published",
+      "questions": [
+        {
+          "_id": "ObjectId",
+          "type": "single",
+          "title": "你的年级",
+          "required": true,
+          "options": [
+            { "label": "大一", "value": "大一" },
+            { "label": "大二", "value": "大二" }
+          ]
+        }
+      ],
+      "jumpRules": [
+        {
+          "sourceQuestionId": "ObjectId",
+          "operator": "equals",
+          "expectedValue": "大一",
+          "targetQuestionId": "ObjectId"
+        }
+      ]
+    }
+
+#### responses 文档
+
+    {
+      "_id": "ObjectId",
+      "surveyId": "ObjectId",
+      "respondentId": null,
+      "anonymous": true,
+      "answers": [
+        {
+          "questionId": "ObjectId",
+          "value": "大一"
+        },
+        {
+          "questionId": "ObjectId",
+          "value": 20
+        }
+      ],
+      "submittedAt": "2026-10-15T12:30:00.000Z"
+    }
+
+### 系统业务流程
+
+1. 用户注册或登录，后端返回 JWT。
+2. 用户创建草稿问卷，系统生成唯一访问码。
+3. 创建者添加题目、校验规则和条件跳转规则。
+4. 问卷发布后，填写者通过访问码获取公开问卷。
+5. 填写者按跳转规则逐题回答，系统实时进行答案校验。
+6. 提交成功后，回答保存到 `responses` 集合。
+7. 创建者通过统计接口查看回答数量、选项分布、文本内容和数字平均值。
+
 ## 四、关键业务逻辑
 
 ### 用户认证
