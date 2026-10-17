@@ -2,3 +2,9 @@ backend/node_modules/
 backend/.env
 backend/data/
 *.log
+# Microsoft Office temporary lock files
+~$*
+
+# Local dependencies and database files
+backend/node_modules/
+backend/data/db/

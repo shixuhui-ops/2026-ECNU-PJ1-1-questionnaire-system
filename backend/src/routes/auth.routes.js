@@ -61,6 +61,13 @@ router.post("/register", async (req, res) => {
             }
         });
     } catch (error) {
+        if (error && error.code === 11000) {
+            return res.status(409).json({
+                success: false,
+                message: "用户名已存在"
+            });
+        }
+
         res.status(500).json({
             success: false,
             message: "注册失败"

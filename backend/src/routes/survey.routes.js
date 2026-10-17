@@ -28,8 +28,71 @@ function validateQuestion(question) {
         if (question.options.some((item) => !String(item.label || "").trim())) {
             return "选项内容不能为空";
         }
+        const optionValues = question.options.map((item) =>
+            String(item.value || "").trim()
+        );
+
+        if (optionValues.some((value) => !value)) {
+            return "选项值不能为空";
+        }
+
+        if (new Set(optionValues).size !== optionValues.length) {
+            return "选项值不能重复";
+        }
+    }
+    const validation = question.validation || {};
+
+    if (question.type === "multiple") {
+        const { minSelections, maxSelections, exactSelections } = validation;
+
+        if (
+            minSelections !== undefined &&
+            maxSelections !== undefined &&
+            minSelections > maxSelections
+        ) {
+            return "最少选择数不能大于最多选择数";
+        }
+
+        if (
+            exactSelections !== undefined &&
+            minSelections !== undefined &&
+            exactSelections < minSelections
+        ) {
+            return "固定选择数不能小于最少选择数";
+        }
+
+        if (
+            exactSelections !== undefined &&
+            maxSelections !== undefined &&
+            exactSelections > maxSelections
+        ) {
+            return "固定选择数不能大于最多选择数";
+        }
     }
 
+    if (question.type === "text") {
+        const { minLength, maxLength } = validation;
+
+        if (
+            minLength !== undefined &&
+            maxLength !== undefined &&
+            minLength > maxLength
+        ) {
+            return "最小文本长度不能大于最大文本长度";
+        }
+    }
+
+    if (question.type === "number") {
+        const { minValue, maxValue } = validation;
+
+        if (
+            minValue !== undefined &&
+            maxValue !== undefined &&
+            minValue > maxValue
+        ) {
+            return "最小值不能大于最大值";
+        }
+    }
     return null;
 }
 
@@ -48,13 +111,33 @@ router.post("/", requireAuth, async (req, res) => {
                 message: "问卷标题不能为空"
             });
         }
+        if (
+            body.allowAnonymous !== undefined &&
+            typeof body.allowAnonymous !== "boolean"
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "allowAnonymous 必须是布尔值"
+            });
+        }
+        let deadline = null;
 
+        if (body.deadline !== undefined && body.deadline !== null && body.deadline !== "") {
+            deadline = new Date(body.deadline);
+
+            if (Number.isNaN(deadline.getTime())) {
+                return res.status(400).json({
+                    success: false,
+                    message: "截止时间格式无效"
+                });
+            }
+        }
         const survey = await Survey.create({
             ownerId: req.user._id,
             title,
             description: String(body.description || "").trim(),
-            allowAnonymous: Boolean(body.allowAnonymous),
-            deadline: body.deadline || null,
+            allowAnonymous: body.allowAnonymous === true,
+            deadline,
             accessCode: createAccessCode()
         });
 
@@ -67,8 +150,7 @@ router.post("/", requireAuth, async (req, res) => {
 
         res.status(500).json({
             success: false,
-            message: "创建问卷失败",
-            detail: error.stack
+            message: "创建问卷失败"
         });
     }
 });
@@ -168,9 +250,40 @@ router.patch("/:id", requireAuth, async (req, res) => {
         const allowedFields = ["title", "description", "allowAnonymous", "deadline"];
 
         for (const field of allowedFields) {
-            if (req.body[field] !== undefined) {
-                survey[field] = req.body[field];
+            if (req.body[field] === undefined) {
+                continue;
             }
+            if (field === "allowAnonymous") {
+                if (typeof req.body.allowAnonymous !== "boolean") {
+                    return res.status(400).json({
+                        success: false,
+                        message: "allowAnonymous 必须是布尔值"
+                    });
+                }
+
+                survey.allowAnonymous = req.body.allowAnonymous;
+                continue;
+            }
+            if (field === "deadline") {
+                if (req.body.deadline === null || req.body.deadline === "") {
+                    survey.deadline = null;
+                    continue;
+                }
+
+                const deadline = new Date(req.body.deadline);
+
+                if (Number.isNaN(deadline.getTime())) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "截止时间格式无效"
+                    });
+                }
+
+                survey.deadline = deadline;
+                continue;
+            }
+
+            survey[field] = req.body[field];
         }
 
         await survey.save();
@@ -263,6 +376,51 @@ router.post("/:id/jump-rules", requireAuth, async (req, res) => {
             });
         }
 
+        if (String(sourceQuestionId) === String(targetQuestionId)) {
+            return res.status(400).json({
+                success: false,
+                message: "跳转目标不能是当前题目"
+            });
+        }
+
+        const sourceQuestion = survey.questions.find(
+            (question) => String(question._id) === String(sourceQuestionId)
+        );
+
+        const numericOperators = [
+            "greaterThan",
+            "lessThan",
+            "greaterOrEqual",
+            "lessOrEqual"
+        ];
+
+        if (operator === "contains" && sourceQuestion.type !== "multiple") {
+            return res.status(400).json({
+                success: false,
+                message: "只有多选题支持包含条件"
+            });
+        }
+
+        if (numericOperators.includes(operator) && sourceQuestion.type !== "number") {
+            return res.status(400).json({
+                success: false,
+                message: "只有数字题支持数值比较条件"
+            });
+        }
+        const duplicateRule = survey.jumpRules.some(
+            (rule) =>
+                String(rule.sourceQuestionId) === String(sourceQuestionId) &&
+                String(rule.targetQuestionId) === String(targetQuestionId) &&
+                rule.operator === operator &&
+                String(rule.expectedValue) === String(expectedValue)
+        );
+
+        if (duplicateRule) {
+            return res.status(409).json({
+                success: false,
+                message: "跳转规则已经存在"
+            });
+        }
         survey.jumpRules.push({
             sourceQuestionId,
             targetQuestionId,
@@ -301,7 +459,12 @@ router.post("/:id/publish", requireAuth, async (req, res) => {
                 message: "问卷至少需要一道题目"
             });
         }
-
+        if (survey.deadline && new Date(survey.deadline) <= new Date()) {
+            return res.status(400).json({
+                success: false,
+                message: "截止时间必须晚于当前时间"
+            });
+        }
         survey.status = "published";
         await survey.save();
 
@@ -361,7 +524,12 @@ router.post("/public/:accessCode/next-question", async (req, res) => {
                 message: "问卷不存在或未发布"
             });
         }
-
+        if (survey.deadline && new Date() > survey.deadline) {
+            return res.status(400).json({
+                success: false,
+                message: "问卷已超过截止时间"
+            });
+        }
         const answers = new Map(
             (Array.isArray(req.body.answers) ? req.body.answers : []).map(
                 (answer) => [String(answer.questionId), answer.value]

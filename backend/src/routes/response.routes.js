@@ -25,7 +25,12 @@ function compareAnswer(answer, operator, expectedValue) {
 }
 
 function validateAnswer(question, value) {
-    if (value === undefined || value === null || value === "") {
+    if (
+        value === undefined ||
+        value === null ||
+        value === "" ||
+        (typeof value === "string" && value.trim() === "")
+    ) {
         return question.required ? "必答题不能为空" : null;
     }
 
@@ -36,7 +41,9 @@ function validateAnswer(question, value) {
 
     if (question.type === "multiple") {
         if (!Array.isArray(value)) return "多选答案必须是数组";
-
+        if (new Set(value).size !== value.length) {
+            return "多选答案不能包含重复选项";
+        }
         const validValues = question.options.map((option) => option.value);
         if (value.some((item) => !validValues.includes(item))) {
             return "多选答案包含无效选项";
@@ -132,7 +139,10 @@ router.post("/:accessCode", async (req, res) => {
                 );
                 respondentId = payload.userId;
             } catch (error) {
-                respondentId = null;
+                return res.status(401).json({
+                    success: false,
+                    message: "登录凭证无效或已过期"
+                });
             }
         }
 

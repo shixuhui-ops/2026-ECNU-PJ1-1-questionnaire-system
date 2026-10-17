@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 
-const baseUrl = "http://localhost:3000/api";
+const baseUrl = process.env.API_BASE_URL || "http://127.0.0.1:3000/api";
 const username = `tester_${Date.now()}`;
 const password = "123456";
 
@@ -45,7 +45,39 @@ async function run() {
     });
 
     const surveyId = created.data._id;
+    let invalidAnonymousTypeFailed = false;
 
+    try {
+        await request("/surveys", {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify({
+                title: "非法匿名配置测试",
+                allowAnonymous: "false"
+            })
+        });
+    } catch (error) {
+        invalidAnonymousTypeFailed = true;
+    }
+
+    assert.equal(invalidAnonymousTypeFailed, true);
+    let invalidDeadlineFailed = false;
+
+    try {
+        await request("/surveys", {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify({
+                title: "非法截止时间测试",
+                description: "测试日期格式校验",
+                deadline: "not-a-valid-date"
+            })
+        });
+    } catch (error) {
+        invalidDeadlineFailed = true;
+    }
+
+    assert.equal(invalidDeadlineFailed, true);
     const singleQuestion = await request(`/surveys/${surveyId}/questions`, {
         method: "POST",
         headers: authHeaders,
@@ -93,21 +125,97 @@ async function run() {
             }
         })
     });
+    let duplicateOptionValueFailed = false;
 
+    try {
+        await request(`/surveys/${surveyId}/questions`, {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify({
+                type: "multiple",
+                title: "重复选项值测试",
+                required: false,
+                options: [
+                    { label: "选项A", value: "same" },
+                    { label: "选项B", value: "same" }
+                ]
+            })
+        });
+    } catch (error) {
+        duplicateOptionValueFailed = true;
+    }
+
+    assert.equal(duplicateOptionValueFailed, true);
+    let invalidRangeFailed = false;
+
+    try {
+        await request(`/surveys/${surveyId}/questions`, {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify({
+                type: "number",
+                title: "非法数字范围测试",
+                required: false,
+                validation: {
+                    minValue: 100,
+                    maxValue: 10
+                }
+            })
+        });
+    } catch (error) {
+        invalidRangeFailed = true;
+    }
+
+    assert.equal(invalidRangeFailed, true);
     const textQuestion = await request(`/surveys/${surveyId}/questions`, {
         method: "POST",
         headers: authHeaders,
         body: JSON.stringify({
             type: "text",
             title: "自我介绍",
-            required: false,
+            required: true,
             validation: {
                 minLength: 2,
                 maxLength: 100
             }
         })
     });
+    let invalidJumpRuleFailed = false;
 
+    try {
+        await request(`/surveys/${surveyId}/jump-rules`, {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify({
+                sourceQuestionId: singleQuestion.data._id,
+                targetQuestionId: numberQuestion.data._id,
+                operator: "greaterThan",
+                expectedValue: 1
+            })
+        });
+    } catch (error) {
+        invalidJumpRuleFailed = true;
+    }
+
+    assert.equal(invalidJumpRuleFailed, true);
+    let selfJumpRuleFailed = false;
+
+    try {
+        await request(`/surveys/${surveyId}/jump-rules`, {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify({
+                sourceQuestionId: singleQuestion.data._id,
+                targetQuestionId: singleQuestion.data._id,
+                operator: "equals",
+                expectedValue: "A"
+            })
+        });
+    } catch (error) {
+        selfJumpRuleFailed = true;
+    }
+
+    assert.equal(selfJumpRuleFailed, true);
     await request(`/surveys/${surveyId}/jump-rules`, {
         method: "POST",
         headers: authHeaders,
@@ -118,7 +226,24 @@ async function run() {
             expectedValue: "A"
         })
     });
+    let duplicateJumpRuleFailed = false;
 
+    try {
+        await request(`/surveys/${surveyId}/jump-rules`, {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify({
+                sourceQuestionId: singleQuestion.data._id,
+                targetQuestionId: numberQuestion.data._id,
+                operator: "equals",
+                expectedValue: "A"
+            })
+        });
+    } catch (error) {
+        duplicateJumpRuleFailed = true;
+    }
+
+    assert.equal(duplicateJumpRuleFailed, true);
     const published = await request(`/surveys/${surveyId}/publish`, {
         method: "POST",
         headers: authHeaders
@@ -209,6 +334,94 @@ async function run() {
     }
 
     assert.equal(invalidAnswerFailed, true);
+    const multipleQuestionId = published.data.survey.questions.find(
+        (question) => question.type === "multiple"
+    )._id;
+
+    let duplicateOptionFailed = false;
+
+    try {
+        await request(`/responses/${accessCode}`, {
+            method: "POST",
+            body: JSON.stringify({
+                answers: [
+                    {
+                        questionId: singleQuestion.data._id,
+                        value: "A"
+                    },
+                    {
+                        questionId: numberQuestion.data._id,
+                        value: 20
+                    },
+                    {
+                        questionId: multipleQuestionId,
+                        value: ["apple", "apple"]
+                    }
+                ]
+            })
+        });
+    } catch (error) {
+        duplicateOptionFailed = true;
+    }
+
+    assert.equal(duplicateOptionFailed, true);
+    let whitespaceTextFailed = false;
+
+    try {
+        await request(`/responses/${accessCode}`, {
+            method: "POST",
+            body: JSON.stringify({
+                answers: [
+                    {
+                        questionId: singleQuestion.data._id,
+                        value: "A"
+                    },
+                    {
+                        questionId: numberQuestion.data._id,
+                        value: 20
+                    },
+                    {
+                        questionId: textQuestion.data._id,
+                        value: "   "
+                    }
+                ]
+            })
+        });
+    } catch (error) {
+        whitespaceTextFailed = true;
+    }
+
+    assert.equal(whitespaceTextFailed, true);
+    let invalidTokenFailed = false;
+
+    try {
+        await request(`/responses/${accessCode}`, {
+            method: "POST",
+            headers: {
+                Authorization: "Bearer invalid-token"
+            },
+            body: JSON.stringify({
+                answers: [
+                    {
+                        questionId: singleQuestion.data._id,
+                        value: "A"
+                    },
+                    {
+                        questionId: numberQuestion.data._id,
+                        value: 20
+                    },
+                    {
+                        questionId: textQuestion.data._id,
+                        value: "有效文本答案"
+                    }
+                ]
+            })
+        });
+    } catch (error) {
+        invalidTokenFailed = true;
+    }
+
+    assert.equal(invalidTokenFailed, true);
     console.log("所有自动化测试通过");
 }
 
