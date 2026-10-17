@@ -1060,3 +1060,53 @@ Set-Location .\backend
 $env:MONGOD_BIN = "D:\MongoDB\bin\mongod.exe"
 npm run test:all
 ```
+
+## 10. 重复填写控制
+
+问卷支持配置同一登录用户是否可以重复提交。
+
+字段：
+
+allowMultipleSubmissions
+
+类型：
+
+Boolean
+
+默认值：
+
+true
+
+含义：
+
+- true：允许同一登录用户多次提交
+- false：同一登录用户只能提交一次
+
+创建问卷时设置：
+
+{
+  "title": "测试问卷",
+  "allowAnonymous": false,
+  "allowMultipleSubmissions": false
+}
+
+修改问卷时设置：
+
+{
+  "allowMultipleSubmissions": false
+}
+
+当字段为 false 且当前登录用户已经提交过该问卷时，再次提交返回：
+
+HTTP 409
+
+{
+  "success": false,
+  "message": "你已经提交过该问卷，不能重复提交"
+}
+
+注意：
+
+- 重复填写限制只针对携带有效 JWT 的登录用户
+- 匿名用户没有稳定身份标识，因此不执行该限制
+- 已有问卷默认允许重复填写，保证历史数据兼容

@@ -347,6 +347,44 @@ npm run test:all
 npm test
 ```
 
+### 浏览器端自动化测试
+
+浏览器端测试使用 Playwright 和 Chromium，验证四个前端页面是否能够正常加载：
+
+- 首页
+- 填写问卷页面
+- 管理问卷页面
+- 统计页面
+
+首次使用需要安装 Playwright 和 Chromium：
+
+Set-Location .\backend
+npm install --save-dev playwright
+npx playwright install chromium
+
+启动前端静态服务器：
+
+Set-Location .\frontend
+python -m http.server 5500
+
+另开一个 PowerShell 窗口执行：
+
+Set-Location .\backend
+$env:FRONTEND_BASE_URL="http://127.0.0.1:5500/frontend"
+npm run test:browser
+
+测试成功时输出：
+
+浏览器端冒烟测试通过
+
+如果 Python 静态服务器从项目根目录启动，则测试地址使用：
+
+http://127.0.0.1:5500/frontend
+
+如果 Python 静态服务器从 frontend 目录启动，则测试地址使用：
+
+http://127.0.0.1:5500
+
 ## 八、测试覆盖范围
 
 自动化测试覆盖：

@@ -139,6 +139,10 @@ const surveySchema = new mongoose.Schema(
             type: Boolean,
             default: false
         },
+        allowMultipleSubmissions: {
+            type: Boolean,
+            default: true
+        },
         status: {
             type: String,
             enum: ["draft", "published", "closed"],

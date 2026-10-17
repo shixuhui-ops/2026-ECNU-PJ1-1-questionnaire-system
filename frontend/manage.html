@@ -116,8 +116,19 @@
     </section>
 
     <section>
+        <label>
+            <input id="allowAnonymous" type="checkbox">
+            允许匿名填写
+        </label>
+
+        <label>
+            <input id="allowMultipleSubmissions" type="checkbox">
+            允许同一用户重复填写
+        </label>
+
         <input id="deadline" type="datetime-local" placeholder="问卷截止时间">
 
+        <button id="saveSettingsButton">保存问卷设置</button>
         <button id="saveDeadlineButton">保存截止时间</button>
         <button id="publishButton">发布问卷</button>
         <button id="closeButton">关闭问卷</button>
@@ -220,6 +231,24 @@
 
                 const result = await apiRequest(`/surveys/${surveyId}`);
                 survey = result.data;
+
+                document.querySelector("#allowAnonymous").checked =
+                    survey.allowAnonymous === true;
+
+                document.querySelector("#allowMultipleSubmissions").checked =
+                    survey.allowMultipleSubmissions !== false;
+
+                if (survey.deadline) {
+                    const deadlineDate = new Date(survey.deadline);
+                    const localDeadline = new Date(
+                        deadlineDate.getTime() - deadlineDate.getTimezoneOffset() * 60000
+                    );
+
+                    document.querySelector("#deadline").value = localDeadline
+                        .toISOString()
+                        .slice(0, 16);
+                }
+
                 renderQuestions();
                 showMessage("问卷加载成功", true);
             } catch (error) {
@@ -401,6 +430,28 @@
             .addEventListener("click", addJumpRule);
     </script>
     <script>
+        async function saveSurveySettings() {
+            try {
+                if (!survey) {
+                    throw new Error("请先加载问卷");
+                }
+
+                const result = await apiRequest(`/surveys/${survey._id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({
+                        allowAnonymous: document.querySelector("#allowAnonymous").checked,
+                        allowMultipleSubmissions: document.querySelector(
+                            "#allowMultipleSubmissions"
+                        ).checked
+                    })
+                });
+
+                survey = result.data;
+                showMessage("问卷设置保存成功", true);
+            } catch (error) {
+                showMessage(error.message);
+            }
+        }
         async function saveDeadline() {
             try {
                 if (!survey) {
@@ -437,7 +488,9 @@
                 showMessage(error.message);
             }
         }
-
+        document
+            .querySelector("#saveSettingsButton")
+            .addEventListener("click", saveSurveySettings);
         document
             .querySelector("#saveDeadlineButton")
             .addEventListener("click", saveDeadline);

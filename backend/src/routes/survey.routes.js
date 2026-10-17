@@ -139,6 +139,15 @@ router.post("/", requireAuth, async (req, res) => {
                 message: "allowAnonymous 必须是布尔值"
             });
         }
+        if (
+            body.allowMultipleSubmissions !== undefined &&
+            typeof body.allowMultipleSubmissions !== "boolean"
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "allowMultipleSubmissions 必须是布尔值"
+            });
+        }
         let deadline = null;
 
         if (body.deadline !== undefined && body.deadline !== null && body.deadline !== "") {
@@ -156,6 +165,8 @@ router.post("/", requireAuth, async (req, res) => {
             title,
             description: String(body.description || "").trim(),
             allowAnonymous: body.allowAnonymous === true,
+            allowMultipleSubmissions:
+                body.allowMultipleSubmissions !== false,
             deadline,
             accessCode: createAccessCode()
         });
@@ -266,21 +277,30 @@ router.patch("/:id", requireAuth, async (req, res) => {
             });
         }
 
-        const allowedFields = ["title", "description", "allowAnonymous", "deadline"];
+        const allowedFields = [
+            "title",
+            "description",
+            "allowAnonymous",
+            "allowMultipleSubmissions",
+            "deadline"
+        ];
 
         for (const field of allowedFields) {
             if (req.body[field] === undefined) {
                 continue;
             }
-            if (field === "allowAnonymous") {
-                if (typeof req.body.allowAnonymous !== "boolean") {
+            if (
+                field === "allowAnonymous" ||
+                field === "allowMultipleSubmissions"
+            ) {
+                if (typeof req.body[field] !== "boolean") {
                     return res.status(400).json({
                         success: false,
-                        message: "allowAnonymous 必须是布尔值"
+                        message: `${field} 必须是布尔值`
                     });
                 }
 
-                survey.allowAnonymous = req.body.allowAnonymous;
+                survey[field] = req.body[field];
                 continue;
             }
             if (field === "deadline") {

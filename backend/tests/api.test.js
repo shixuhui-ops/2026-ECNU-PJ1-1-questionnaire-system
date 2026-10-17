@@ -520,7 +520,8 @@ async function run() {
         body: JSON.stringify({
             title: "非匿名提交测试问卷",
             description: "测试未登录用户不能提交",
-            allowAnonymous: false
+            allowAnonymous: false,
+            allowMultipleSubmissions: false
         })
     });
 
@@ -595,6 +596,34 @@ async function run() {
     );
 
     assert.equal(authenticatedPrivateSubmit.success, true);
+
+    let duplicatePrivateSubmitFailed = false;
+
+    try {
+        await request(`/responses/${privateAccessCode}`, {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify({
+                answers: [
+                    {
+                        questionId: privateQuestion.data._id,
+                        value: "yes"
+                    }
+                ]
+            })
+        });
+    } catch (error) {
+        assert.equal(error.status, 409);
+        assert.equal(error.body.success, false);
+        assert.equal(
+            error.body.message,
+            "你已经提交过该问卷，不能重复提交"
+        );
+        duplicatePrivateSubmitFailed = true;
+    }
+
+    assert.equal(duplicatePrivateSubmitFailed, true);
+
     await request(`/surveys/${privateSurveyId}/close`, {
         method: "POST",
         headers: authHeaders

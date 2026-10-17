@@ -155,6 +155,20 @@ router.post("/:accessCode", async (req, res) => {
             });
         }
 
+        if (respondentId && survey.allowMultipleSubmissions === false) {
+            const existingResponse = await Response.exists({
+                surveyId: survey._id,
+                respondentId
+            });
+
+            if (existingResponse) {
+                return res.status(409).json({
+                    success: false,
+                    message: "你已经提交过该问卷，不能重复提交"
+                });
+            }
+        }
+
         const submittedAnswers = Array.isArray(req.body.answers)
             ? req.body.answers
             : [];

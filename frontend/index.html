@@ -108,6 +108,12 @@
             <input id="allowAnonymous" type="checkbox">
             允许匿名填写
         </label>
+
+        <label>
+            <input id="allowMultipleSubmissions" type="checkbox" checked>
+            允许同一用户重复填写
+        </label>
+
         <button id="createSurveyButton">创建问卷</button>
 
         <h2>我的问卷</h2>
@@ -189,7 +195,10 @@
                     body: JSON.stringify({
                         title: document.querySelector("#surveyTitle").value,
                         description: document.querySelector("#surveyDescription").value,
-                        allowAnonymous: document.querySelector("#allowAnonymous").checked
+                        allowAnonymous: document.querySelector("#allowAnonymous").checked,
+                        allowMultipleSubmissions: document.querySelector(
+                            "#allowMultipleSubmissions"
+                        ).checked
                     })
                 });
 
