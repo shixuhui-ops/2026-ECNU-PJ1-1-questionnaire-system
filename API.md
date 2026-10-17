@@ -1063,50 +1063,216 @@ npm run test:all
 
 ## 10. 重复填写控制
 
-问卷支持配置同一登录用户是否可以重复提交。
+问卷通过 `allowMultipleSubmissions` 字段控制同一登录用户是否可以重复提交。
 
-字段：
+### 10.1 字段说明
 
-allowMultipleSubmissions
+| 字段 | 类型 | 默认值 | 说明 |
+|---|---|---:|---|
+| `allowMultipleSubmissions` | Boolean | `true` | 是否允许同一登录用户重复填写 |
 
-类型：
+字段行为：
 
-Boolean
+- `true`：允许同一登录用户多次提交同一份问卷。
+- `false`：同一登录用户只能提交一次。
+- 匿名用户没有稳定的用户身份，因此不执行同一用户重复填写限制。
+- 已有问卷默认使用 `true`，保证旧数据兼容。
 
-默认值：
+### 10.2 创建问卷
 
-true
+创建问卷时可以设置是否允许重复填写：
 
-含义：
+```http
+POST /api/surveys
+Authorization: Bearer <JWT_TOKEN>
+Content-Type: application/json
+```
 
-- true：允许同一登录用户多次提交
-- false：同一登录用户只能提交一次
+请求示例：
 
-创建问卷时设置：
-
+```json
 {
-  "title": "测试问卷",
-  "allowAnonymous": false,
+  "title": "学生信息调查问卷",
+  "description": "用于收集学生基本信息",
+  "allowAnonymous": true,
+  "allowMultipleSubmissions": false,
+  "deadline": "2026-12-31T23:59:00.000Z"
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---:|---|
+| `title` | String | 是 | 问卷标题 |
+| `description` | String | 否 | 问卷说明 |
+| `allowAnonymous` | Boolean | 否 | 是否允许匿名填写，默认 `false` |
+| `allowMultipleSubmissions` | Boolean | 否 | 是否允许同一登录用户重复填写，默认 `true` |
+| `deadline` | Date | 否 | 截止时间，可以为空 |
+
+`allowMultipleSubmissions` 必须是布尔值：
+
+```json
+{
+  "allowMultipleSubmissions": true
+}
+```
+
+以下写法会被拒绝：
+
+```json
+{
+  "allowMultipleSubmissions": "false"
+}
+```
+
+创建成功响应示例：
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "问卷ID",
+    "ownerId": "用户ID",
+    "title": "学生信息调查问卷",
+    "description": "用于收集学生基本信息",
+    "accessCode": "2b5ddbf18f84",
+    "allowAnonymous": true,
+    "allowMultipleSubmissions": false,
+    "status": "draft",
+    "deadline": null,
+    "questions": [],
+    "jumpRules": []
+  }
+}
+```
+
+### 10.3 查看问卷详情
+
+查看问卷详情时，响应中包含当前重复填写配置：
+
+```http
+GET /api/surveys/:id
+Authorization: Bearer <JWT_TOKEN>
+```
+
+响应中的相关字段：
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "问卷ID",
+    "title": "学生信息调查问卷",
+    "allowAnonymous": true,
+    "allowMultipleSubmissions": false,
+    "status": "draft"
+  }
+}
+```
+
+### 10.4 修改重复填写配置
+
+可以通过修改问卷接口更新该字段：
+
+```http
+PATCH /api/surveys/:id
+Authorization: Bearer <JWT_TOKEN>
+Content-Type: application/json
+```
+
+请求示例：
+
+```json
+{
   "allowMultipleSubmissions": false
 }
+```
 
-修改问卷时设置：
+允许修改的字段包括：
 
-{
-  "allowMultipleSubmissions": false
-}
+- `title`
+- `description`
+- `allowAnonymous`
+- `allowMultipleSubmissions`
+- `deadline`
 
-当字段为 false 且当前登录用户已经提交过该问卷时，再次提交返回：
+字段不是布尔值时，接口返回：
 
-HTTP 409
-
+```json
 {
   "success": false,
-  "message": "你已经提交过该问卷，不能重复提交"
+  "message": "allowMultipleSubmissions 必须是布尔值"
 }
+```
 
-注意：
+### 10.5 提交问卷时的限制
 
-- 重复填写限制只针对携带有效 JWT 的登录用户
-- 匿名用户没有稳定身份标识，因此不执行该限制
-- 已有问卷默认允许重复填写，保证历史数据兼容
+提交接口：
+
+```http
+POST /api/responses/:accessCode
+Content-Type: application/json
+```
+
+登录用户提交时，需要携带 JWT：
+
+```http
+Authorization: Bearer <JWT_TOKEN>
+```
+
+请求示例：
+
+```json
+{
+  "answers": [
+    {
+      "questionId": "题目ID",
+      "value": "选项A"
+    }
+  ]
+}
+```
+
+当问卷的 `allowMultipleSubmissions` 为 `true` 时，同一登录用户可以重复提交：
+
+```json
+{
+  "success": true,
+  "message": "问卷提交成功",
+  "data": {
+    "responseId": "回答记录ID"
+  }
+}
+```
+
+当问卷的 `allowMultipleSubmissions` 为 `false`，并且当前登录用户已经提交过该问卷时，接口返回：
+
+```http
+409 Conflict
+```
+
+响应：
+
+```json
+{
+  "success": false,
+  "message": "同一用户不能重复提交该问卷"
+}
+```
+
+匿名用户提交时：
+
+- 必须满足问卷的 `allowAnonymous` 配置。
+- 不执行同一用户重复填写限制。
+- 每次匿名提交都会生成独立的回答记录。
+
+### 10.6 相关状态码
+
+| 状态码 | 说明 |
+|---:|---|
+| `200` | 修改问卷或提交成功 |
+| `400` | 重复填写配置格式错误或答案校验失败 |
+| `401` | 未登录、Token 无效或问卷不允许匿名填写 |
+| `404` | 问卷不存在或访问码无效 |
+| `409` | 当前登录用户已经提交过不允许重复填写的问卷 |

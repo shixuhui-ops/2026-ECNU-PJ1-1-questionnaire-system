@@ -147,6 +147,35 @@
 
 回答记录单独存储，便于多人提交和统计查询。
 
+### 重复填写控制
+
+问卷使用 `allowMultipleSubmissions` 字段控制同一登录用户是否可以重复填写。
+
+字段规则：
+
+- `true`：允许同一登录用户重复提交同一份问卷。
+- `false`：同一登录用户只能提交一次。
+- 默认值为 `true`，保证已有问卷兼容。
+- 匿名用户没有稳定的用户身份，因此不执行同一用户重复填写限制。
+
+该字段保存在 `surveys` 集合中：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `allowMultipleSubmissions` | Boolean | 是否允许同一登录用户重复填写 |
+
+创建或修改问卷时，可以通过接口设置该字段：
+
+```json
+{
+  "allowMultipleSubmissions": false
+}
+```
+
+当字段为 `false` 且同一登录用户已经提交过该问卷时，重复提交会返回 HTTP `409 Conflict`。
+
+当字段为 `true` 时，同一登录用户可以重复提交。
+
 ## 五、环境配置
 
 进入后端目录：
@@ -349,41 +378,120 @@ npm test
 
 ### 浏览器端自动化测试
 
-浏览器端测试使用 Playwright 和 Chromium，验证四个前端页面是否能够正常加载：
+项目使用 Playwright 和 Chromium 进行浏览器自动化测试，包含浏览器冒烟测试和浏览器端端到端流程测试。
+
+#### 1. 安装浏览器测试依赖
+
+首次使用时，在 `backend` 目录执行：
+
+    Set-Location .\backend
+    npm install
+    npx playwright install chromium
+
+#### 2. 启动前端静态服务器
+
+如果从项目根目录启动：
+
+    Set-Location .
+    python -m http.server 5500
+
+此时前端地址为：
+
+    http://127.0.0.1:5500/frontend
+
+如果从 `frontend` 目录启动：
+
+    Set-Location .\frontend
+    python -m http.server 5500
+
+此时前端地址为：
+
+    http://127.0.0.1:5500
+
+#### 3. 浏览器冒烟测试
+
+浏览器冒烟测试文件：
+
+    backend/tests/browser-smoke.test.js
+
+冒烟测试验证以下页面能够正常加载：
 
 - 首页
-- 填写问卷页面
-- 管理问卷页面
+- 问卷填写页面
+- 问卷管理页面
 - 统计页面
 
-首次使用需要安装 Playwright 和 Chromium：
+当静态服务器从项目根目录启动时，执行：
 
-Set-Location .\backend
-npm install --save-dev playwright
-npx playwright install chromium
+    Set-Location .\backend
+    $env:FRONTEND_BASE_URL="http://127.0.0.1:5500/frontend"
+    npm run test:browser
 
-启动前端静态服务器：
+测试成功输出：
 
-Set-Location .\frontend
-python -m http.server 5500
+    浏览器端冒烟测试通过
 
-另开一个 PowerShell 窗口执行：
+#### 4. 浏览器端端到端测试
 
-Set-Location .\backend
-$env:FRONTEND_BASE_URL="http://127.0.0.1:5500/frontend"
-npm run test:browser
+浏览器端到端测试文件：
 
-测试成功时输出：
+    backend/tests/browser-e2e.test.js
 
-浏览器端冒烟测试通过
+该测试模拟真实用户完成以下完整流程：
 
-如果 Python 静态服务器从项目根目录启动，则测试地址使用：
+    注册用户
+    → 创建问卷
+    → 设置匿名填写和重复填写
+    → 添加单选题
+    → 发布问卷
+    → 打开填写链接
+    → 选择答案
+    → 提交问卷
+    → 查看统计结果
 
-http://127.0.0.1:5500/frontend
+执行端到端测试前，需要确保：
 
-如果 Python 静态服务器从 frontend 目录启动，则测试地址使用：
+- MongoDB 已启动
+- 后端服务运行在 `3000` 端口
+- 前端静态服务器已启动
+- 浏览器测试使用的前端地址与 `FRONTEND_BASE_URL` 一致
 
-http://127.0.0.1:5500
+启动后端服务：
+
+    Set-Location .\backend
+    $env:PORT="3000"
+    $env:MONGODB_URI="mongodb://127.0.0.1:27017/questionnaire_system"
+    $env:JWT_SECRET="questionnaire-local-development-secret"
+    node src/server.js
+
+当静态服务器从项目根目录启动时，执行端到端测试：
+
+    Set-Location .\backend
+    $env:FRONTEND_BASE_URL="http://127.0.0.1:5500/frontend"
+    npm run test:e2e
+
+测试成功输出：
+
+    浏览器端到端流程测试通过
+
+端到端测试验证了以下内容：
+
+- 注册页面和 JWT 登录状态
+- 创建问卷请求
+- 匿名填写配置
+- 同一用户重复填写配置
+- 题目创建
+- 问卷发布
+- 公开填写页面
+- 答案选择
+- 问卷提交
+- 统计结果查询
+- 前端和后端之间的完整业务链路
+
+浏览器端自动化测试对应的 npm 命令如下：
+
+    npm run test:browser
+    npm run test:e2e
 
 ## 八、测试覆盖范围
 
