@@ -45,7 +45,8 @@
     <div id="statistics"></div>
 
     <script>
-        const apiBase = "http://localhost:3000/api";
+        const apiHost = window.location.hostname || "localhost";
+        const apiBase = `http://${apiHost}:3000/api`;
         const token = localStorage.getItem("questionnaire_token");
 
         function showMessage(message, success = false) {
@@ -54,39 +55,69 @@
             element.style.color = success ? "#087f23" : "#b00020";
         }
 
+        function escapeHtml(value) {
+            return String(value ?? "")
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#039;");
+        }
+
         function renderStatistics(data) {
             const container = document.querySelector("#statistics");
+
             container.innerHTML = `
-        <h2>${data.title}</h2>
-        <p>总回答数：${data.totalResponses}</p>
-      `;
+                <h2>${escapeHtml(data.title)}</h2>
+                <p>总回答数：${escapeHtml(data.totalResponses)}</p>
+            `;
 
             data.statistics.forEach((item) => {
                 const element = document.createElement("div");
                 element.className = "item";
 
                 if (item.options) {
+                    const optionsHtml = Object.values(item.options)
+                        .map(
+                            (option) =>
+                                `<div>${escapeHtml(option.label)}：${escapeHtml(
+                                    option.count
+                                )}</div>`
+                        )
+                        .join("");
+
                     element.innerHTML = `
-            <h3>${item.title}</h3>
-            <p>回答数：${item.totalAnswers}</p>
-            ${Object.values(item.options)
-                            .map((option) => `<div>${option.label}：${option.count}</div>`)
-                            .join("")}
-          `;
+                        <h3>${escapeHtml(item.title)}</h3>
+                        <p>回答数：${escapeHtml(item.totalAnswers)}</p>
+                        ${optionsHtml}
+                    `;
                 } else if (item.average !== undefined) {
+                    const valuesHtml = Array.isArray(item.values)
+                        ? item.values
+                            .map((value) => escapeHtml(value))
+                            .join(", ")
+                        : "";
+
                     element.innerHTML = `
-            <h3>${item.title}</h3>
-            <p>回答数：${item.totalAnswers}</p>
-            <p>平均值：${item.average ?? "暂无数据"}</p>
-            <p>全部数字：${item.values.join(", ")}</p>
-          `;
+                        <h3>${escapeHtml(item.title)}</h3>
+                        <p>回答数：${escapeHtml(item.totalAnswers)}</p>
+                        <p>平均值：${escapeHtml(item.average ?? "暂无数据")}</p>
+                        <p>全部数字：${valuesHtml}</p>
+                    `;
                 } else {
+                    const valuesHtml =
+                        Array.isArray(item.values) && item.values.length > 0
+                            ? item.values
+                                .map((value) => escapeHtml(value))
+                                .join("<br>")
+                            : "暂无数据";
+
                     element.innerHTML = `
-            <h3>${item.title}</h3>
-            <p>回答数：${item.totalAnswers}</p>
-            <p>填写内容：</p>
-            <div>${item.values.join("<br>") || "暂无数据"}</div>
-          `;
+                        <h3>${escapeHtml(item.title)}</h3>
+                        <p>回答数：${escapeHtml(item.totalAnswers)}</p>
+                        <p>填写内容：</p>
+                        <div>${valuesHtml}</div>
+                    `;
                 }
 
                 container.appendChild(element);
@@ -99,7 +130,10 @@
                     throw new Error("请先在首页登录");
                 }
 
-                const surveyId = document.querySelector("#surveyId").value.trim();
+                const surveyId = document
+                    .querySelector("#surveyId")
+                    .value
+                    .trim();
 
                 if (!surveyId) {
                     throw new Error("请输入问卷ID");

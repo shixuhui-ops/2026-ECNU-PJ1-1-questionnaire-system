@@ -299,6 +299,33 @@ export MONGOD_BIN=/opt/homebrew/bin/mongod
 npm run test:all
 ```
 
+### 测试环境隔离说明
+
+一键测试使用独立的 MongoDB 目录、端口、后端端口和测试数据库：
+
+| 项目 | 正常运行环境 | 自动化测试环境 |
+|---|---|---|
+| MongoDB 数据目录 | `backend/data/db` | `backend/data/test-db` |
+| MongoDB 端口 | `27017` | `27018` |
+| 后端端口 | `3000` | `3100` |
+| 数据库名称 | `questionnaire_system` | `questionnaire_system_test` |
+
+测试数据不会写入正常运行使用的数据库，也不会占用正常 MongoDB 和后端服务使用的端口。
+
+`backend/data/test-db` 会在执行 `npm run test:all` 时自动创建，并且已经被 `backend/data/` 的 Git 忽略规则覆盖，不会提交到代码仓库。
+
+可以通过环境变量修改测试配置：
+
+```powershell
+$env:TEST_MONGO_PORT="27019"
+$env:TEST_API_PORT="3200"
+$env:TEST_MONGODB_URI="mongodb://127.0.0.1:27019/custom_questionnaire_test"
+npm run test:all
+```
+
+测试环境还会读取 `JWT_SECRET`。如果当前环境没有设置，会自动使用仅用于本地自动化测试的测试密钥。该测试密钥不应在生产环境中使用。
+
+
 `npm run test:all` 会自动：
 
 1. 启动 MongoDB

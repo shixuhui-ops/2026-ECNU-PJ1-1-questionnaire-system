@@ -75,7 +75,8 @@
     <p id="message"></p>
 
     <script>
-        const apiBase = "http://localhost:3000/api";
+        const apiHost = window.location.hostname || "localhost";
+        const apiBase = `http://${apiHost}:3000/api`;
         let survey = null;
         let currentQuestion = null;
         let answers = [];
@@ -84,6 +85,19 @@
             const element = document.querySelector("#message");
             element.textContent = message;
             element.style.color = success ? "#087f23" : "#b00020";
+        }
+        function createAnswerLabel(type, option) {
+            const label = document.createElement("label");
+            const input = document.createElement("input");
+
+            input.type = type;
+            input.name = "answer";
+            input.value = option.value;
+
+            label.appendChild(input);
+            label.appendChild(document.createTextNode(option.label));
+
+            return label;
         }
 
         function getAccessCode() {
@@ -157,23 +171,13 @@
 
             if (currentQuestion.type === "single") {
                 currentQuestion.options.forEach((option) => {
-                    const label = document.createElement("label");
-                    label.innerHTML = `
-            <input type="radio" name="answer" value="${option.value}">
-            ${option.label}
-          `;
-                    wrapper.appendChild(label);
+                    wrapper.appendChild(createAnswerLabel("radio", option));
                 });
             }
 
             if (currentQuestion.type === "multiple") {
                 currentQuestion.options.forEach((option) => {
-                    const label = document.createElement("label");
-                    label.innerHTML = `
-            <input type="checkbox" name="answer" value="${option.value}">
-            ${option.label}
-          `;
-                    wrapper.appendChild(label);
+                    wrapper.appendChild(createAnswerLabel("checkbox", option));
                 });
             }
 
@@ -258,12 +262,19 @@
 
         async function submitSurvey() {
             try {
+                const token = localStorage.getItem("questionnaire_token");
+
                 const response = await fetch(
                     `${apiBase}/responses/${survey.accessCode}`,
                     {
                         method: "POST",
                         headers: {
-                            "Content-Type": "application/json"
+                            "Content-Type": "application/json",
+                            ...(token
+                                ? {
+                                    Authorization: `Bearer ${token}`
+                                }
+                                : {})
                         },
                         body: JSON.stringify({ answers })
                     }

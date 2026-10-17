@@ -44,26 +44,45 @@ function validateQuestion(question) {
 
     if (question.type === "multiple") {
         const { minSelections, maxSelections, exactSelections } = validation;
+        const selectionLimits = [
+            ["最少选择数", minSelections],
+            ["最多选择数", maxSelections],
+            ["固定选择数", exactSelections]
+        ];
+
+        for (const [name, value] of selectionLimits) {
+            if (value == null) {
+                continue;
+            }
+
+            if (!Number.isInteger(value) || value < 0) {
+                return `${name}必须是大于等于0的整数`;
+            }
+
+            if (value > question.options.length) {
+                return `${name}不能大于选项总数`;
+            }
+        }
 
         if (
-            minSelections !== undefined &&
-            maxSelections !== undefined &&
+            minSelections != null &&
+            maxSelections != null &&
             minSelections > maxSelections
         ) {
             return "最少选择数不能大于最多选择数";
         }
 
         if (
-            exactSelections !== undefined &&
-            minSelections !== undefined &&
+            exactSelections != null &&
+            minSelections != null &&
             exactSelections < minSelections
         ) {
             return "固定选择数不能小于最少选择数";
         }
 
         if (
-            exactSelections !== undefined &&
-            maxSelections !== undefined &&
+            exactSelections != null &&
+            maxSelections != null &&
             exactSelections > maxSelections
         ) {
             return "固定选择数不能大于最多选择数";
@@ -74,8 +93,8 @@ function validateQuestion(question) {
         const { minLength, maxLength } = validation;
 
         if (
-            minLength !== undefined &&
-            maxLength !== undefined &&
+            minLength != null &&
+            maxLength != null &&
             minLength > maxLength
         ) {
             return "最小文本长度不能大于最大文本长度";
@@ -86,8 +105,8 @@ function validateQuestion(question) {
         const { minValue, maxValue } = validation;
 
         if (
-            minValue !== undefined &&
-            maxValue !== undefined &&
+            minValue != null &&
+            maxValue != null &&
             minValue > maxValue
         ) {
             return "最小值不能大于最大值";
@@ -362,6 +381,12 @@ router.post("/:id/jump-rules", requireAuth, async (req, res) => {
                 message: "问卷不存在"
             });
         }
+        if (survey.status !== "draft") {
+            return res.status(400).json({
+                success: false,
+                message: "只有草稿状态的问卷可以添加跳转规则"
+            });
+        }
 
         const questionIds = survey.questions.map((question) => question._id.toString());
         const { sourceQuestionId, targetQuestionId, operator, expectedValue } = req.body;
@@ -386,6 +411,17 @@ router.post("/:id/jump-rules", requireAuth, async (req, res) => {
         const sourceQuestion = survey.questions.find(
             (question) => String(question._id) === String(sourceQuestionId)
         );
+
+        const targetQuestion = survey.questions.find(
+            (question) => String(question._id) === String(targetQuestionId)
+        );
+
+        if (targetQuestion.order <= sourceQuestion.order) {
+            return res.status(400).json({
+                success: false,
+                message: "跳转目标必须位于源题目之后"
+            });
+        }
 
         const numericOperators = [
             "greaterThan",
@@ -450,6 +486,12 @@ router.post("/:id/publish", requireAuth, async (req, res) => {
             return res.status(404).json({
                 success: false,
                 message: "问卷不存在"
+            });
+        }
+        if (survey.status === "closed") {
+            return res.status(400).json({
+                success: false,
+                message: "已关闭的问卷不能重新发布"
             });
         }
 

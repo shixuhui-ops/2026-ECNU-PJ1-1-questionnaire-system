@@ -74,8 +74,9 @@
             必答题
         </label>
 
-        <input id="minSelections" type="number" placeholder="最少选择数量">
-        <input id="maxSelections" type="number" placeholder="最多选择数量">
+        <input id="minSelections" type="number" min="0" placeholder="最少选择数量">
+        <input id="maxSelections" type="number" min="0" placeholder="最多选择数量">
+        <input id="exactSelections" type="number" min="0" placeholder="固定选择数量">
         <input id="minLength" type="number" placeholder="最少文本长度">
         <input id="maxLength" type="number" placeholder="最多文本长度">
         <input id="minValue" type="number" placeholder="最小数值">
@@ -127,7 +128,8 @@
     <p id="message"></p>
 
     <script>
-        const apiBase = "http://localhost:3000/api";
+        const apiHost = window.location.hostname || "localhost";
+        const apiBase = `http://${apiHost}:3000/api`;
         const token = localStorage.getItem("questionnaire_token");
         let survey = null;
 
@@ -135,6 +137,14 @@
             const element = document.querySelector("#message");
             element.textContent = message;
             element.style.color = success ? "#087f23" : "#b00020";
+        }
+        function escapeHtml(value) {
+            return String(value ?? "")
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#039;");
         }
 
         async function apiRequest(path, options = {}) {
@@ -167,10 +177,10 @@
                     const item = document.createElement("div");
                     item.className = "question";
                     item.innerHTML = `
-            <strong>${index + 1}. ${question.title}</strong>
-            <div>类型：${question.type}</div>
+            <strong>${escapeHtml(index + 1)}. ${escapeHtml(question.title)}</strong>
+            <div>类型：${escapeHtml(question.type)}</div>
             <div>必答：${question.required ? "是" : "否"}</div>
-            <div>题目ID：${question._id}</div>
+            <div>题目ID：${escapeHtml(question._id)}</div>
           `;
                     container.appendChild(item);
                 });
@@ -239,6 +249,7 @@
                 const fields = [
                     "minSelections",
                     "maxSelections",
+                    "exactSelections",
                     "minLength",
                     "maxLength",
                     "minValue",
@@ -290,8 +301,14 @@
                     }
                 );
 
+                const fillUrl = new URL("fill.html", window.location.href);
+                fillUrl.searchParams.set(
+                    "code",
+                    result.data.survey.accessCode
+                );
+
                 document.querySelector("#accessUrl").textContent =
-                    `填写地址：http://localhost:5500/fill.html?code=${result.data.survey.accessCode}`;
+                    `填写地址：${fillUrl.toString()}`;
 
                 showMessage("问卷发布成功", true);
             } catch (error) {
@@ -304,7 +321,8 @@
             const options = document.querySelector("#questionOptions");
             const selectionFields = [
                 "minSelections",
-                "maxSelections"
+                "maxSelections",
+                "exactSelections"
             ];
             const textFields = [
                 "minLength",

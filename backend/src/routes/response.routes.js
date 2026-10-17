@@ -25,12 +25,14 @@ function compareAnswer(answer, operator, expectedValue) {
 }
 
 function validateAnswer(question, value) {
-    if (
+    const emptyAnswer =
         value === undefined ||
         value === null ||
         value === "" ||
-        (typeof value === "string" && value.trim() === "")
-    ) {
+        (typeof value === "string" && value.trim() === "") ||
+        (Array.isArray(value) && value.length === 0);
+
+    if (emptyAnswer) {
         return question.required ? "必答题不能为空" : null;
     }
 
@@ -51,15 +53,15 @@ function validateAnswer(question, value) {
 
         const { minSelections, maxSelections, exactSelections } = question.validation || {};
 
-        if (exactSelections !== undefined && value.length !== exactSelections) {
+        if (exactSelections != null && value.length !== exactSelections) {
             return `必须选择${exactSelections}个选项`;
         }
 
-        if (minSelections !== undefined && value.length < minSelections) {
+        if (minSelections != null && value.length < minSelections) {
             return `至少选择${minSelections}个选项`;
         }
 
-        if (maxSelections !== undefined && value.length > maxSelections) {
+        if (maxSelections != null && value.length > maxSelections) {
             return `最多选择${maxSelections}个选项`;
         }
 
@@ -71,11 +73,11 @@ function validateAnswer(question, value) {
 
         const { minLength, maxLength } = question.validation || {};
 
-        if (minLength !== undefined && value.length < minLength) {
+        if (minLength != null && value.length < minLength) {
             return `文本长度不能少于${minLength}`;
         }
 
-        if (maxLength !== undefined && value.length > maxLength) {
+        if (maxLength != null && value.length > maxLength) {
             return `文本长度不能超过${maxLength}`;
         }
 
@@ -92,11 +94,11 @@ function validateAnswer(question, value) {
             return "答案必须是整数";
         }
 
-        if (minValue !== undefined && numberValue < minValue) {
+        if (minValue != null && numberValue < minValue) {
             return `数字不能小于${minValue}`;
         }
 
-        if (maxValue !== undefined && numberValue > maxValue) {
+        if (maxValue != null && numberValue > maxValue) {
             return `数字不能大于${maxValue}`;
         }
 
@@ -157,6 +159,39 @@ router.post("/:accessCode", async (req, res) => {
             ? req.body.answers
             : [];
 
+        const questionMap = new Map(
+            survey.questions.map((question) => [String(question._id), question])
+        );
+
+        const submittedQuestionIds = new Set();
+
+        for (const answer of submittedAnswers) {
+            if (!answer || answer.questionId === undefined) {
+                return res.status(400).json({
+                    success: false,
+                    message: "答案缺少题目ID"
+                });
+            }
+
+            const questionId = String(answer.questionId);
+
+            if (!questionMap.has(questionId)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "答案包含不存在的题目"
+                });
+            }
+
+            if (submittedQuestionIds.has(questionId)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "同一道题不能重复提交答案"
+                });
+            }
+
+            submittedQuestionIds.add(questionId);
+        }
+
         const answerMap = new Map(
             submittedAnswers.map((answer) => [
                 String(answer.questionId),
@@ -165,9 +200,6 @@ router.post("/:accessCode", async (req, res) => {
         );
 
         const normalizedAnswers = [];
-        const questionMap = new Map(
-            survey.questions.map((question) => [String(question._id), question])
-        );
 
         const orderedQuestions = [...survey.questions].sort(
             (a, b) => a.order - b.order
@@ -238,6 +270,19 @@ router.post("/:accessCode", async (req, res) => {
                     success: false,
                     message: `题目“${question.title}”：${validationError}`
                 });
+            }
+
+            const optionalAnswerIsEmpty =
+                !question.required &&
+                (
+                    value === null ||
+                    value === "" ||
+                    (typeof value === "string" && value.trim() === "") ||
+                    (Array.isArray(value) && value.length === 0)
+                );
+
+            if (optionalAnswerIsEmpty) {
+                continue;
             }
 
             normalizedAnswers.push({

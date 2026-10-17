@@ -116,7 +116,8 @@
     </section>
 
     <script>
-        const apiBase = "http://localhost:3000/api";
+        const apiHost = window.location.hostname || "localhost";
+        const apiBase = `http://${apiHost}:3000/api`;
         let token = localStorage.getItem("questionnaire_token") || "";
 
         const messageElement = document.querySelector("#message");
@@ -126,6 +127,14 @@
         function showMessage(message, isError = true) {
             messageElement.textContent = message;
             messageElement.style.color = isError ? "#b00020" : "#087f23";
+        }
+        function escapeHtml(value) {
+            return String(value ?? "")
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#039;");
         }
 
         function updateView() {
@@ -201,11 +210,11 @@
                     const item = document.createElement("div");
                     item.className = "survey-item";
                     item.innerHTML = `
-            <strong>${survey.title}</strong>
-            <div>状态：${survey.status}</div>
-            <div>问卷ID：${survey._id}</div>
-            <div>访问码：${survey.accessCode}</div>
-            <div>题目数：${survey.questions.length}</div>
+            <strong>${escapeHtml(survey.title)}</strong>
+            <div>状态：${escapeHtml(survey.status)}</div>
+            <div>问卷ID：${escapeHtml(survey._id)}</div>
+            <div>访问码：${escapeHtml(survey.accessCode)}</div>
+            <div>题目数：${escapeHtml(survey.questions.length)}</div>
           `;
                     list.appendChild(item);
                 }

@@ -1,8 +1,31 @@
+const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 
 const backendDir = path.resolve(__dirname, "..");
-const dbPath = path.join(backendDir, "data", "db");
+const dbPath = path.join(backendDir, "data", "test-db");
+
+fs.mkdirSync(dbPath, {
+    recursive: true
+});
+
+const testMongoPort = Number(process.env.TEST_MONGO_PORT || 27018);
+const testApiPort = Number(process.env.TEST_API_PORT || 3100);
+
+const testMongoUri =
+    process.env.TEST_MONGODB_URI ||
+    `mongodb://127.0.0.1:${testMongoPort}/questionnaire_system_test`;
+
+const testApiBaseUrl = `http://127.0.0.1:${testApiPort}/api`;
+
+const testEnvironment = {
+    ...process.env,
+    PORT: String(testApiPort),
+    MONGODB_URI: testMongoUri,
+    JWT_SECRET:
+        process.env.JWT_SECRET ||
+        "questionnaire-test-secret"
+};
 
 const children = [];
 
@@ -62,23 +85,25 @@ async function main() {
         "--dbpath",
         dbPath,
         "--port",
-        "27017",
+        String(testMongoPort),
         "--bind_ip",
         "127.0.0.1",
         "--quiet"
     ]);
 
-    startProcess(process.execPath, ["src/server.js"]);
+    startProcess(process.execPath, ["src/server.js"], {
+        env: testEnvironment
+    });
 
     try {
-        await waitForHealth("http://127.0.0.1:3000/api/health");
+        await waitForHealth(`${testApiBaseUrl}/health`);
 
         const test = spawn(process.execPath, ["tests/api.test.js"], {
             cwd: backendDir,
             stdio: "inherit",
             env: {
-                ...process.env,
-                API_BASE_URL: "http://127.0.0.1:3000/api"
+                ...testEnvironment,
+                API_BASE_URL: testApiBaseUrl
             }
         });
 
